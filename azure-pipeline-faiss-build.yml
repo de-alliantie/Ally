@@ -1,0 +1,101 @@
+trigger:
+  branches:
+    include:
+    - main
+  paths:
+    include:
+    - src/scheduled_runs/*
+
+variables:
+  - name: tag
+    value: |
+      $(Build.BuildId)
+      latest
+  - ${{ if eq(variables['Build.SourceBranchName'], 'main') }}:
+    - name: serviceConnectionName
+      value: Pitwall-datapltfrm-docker-prd
+    - name: container_repository
+      value: klantenservice-chat-kennisbank-faiss-generator-prd
+    - name: containerResourceGroup
+      value: rg-mlcontainers-prd
+    - name: environment
+      value: prd
+  - ${{ else }}:
+    - name: serviceConnectionName
+      value: Pitwall-datapltfrm-docker-dev
+    - name: container_repository
+      value: klantenservice-chat-kennisbank-faiss-generator-dev
+    - name: containerResourceGroup
+      value: rg-mlcontainers-dev
+    - name: environment
+      value: tst
+    
+
+stages:
+- stage: CI  
+  pool:
+    vmImage: ubuntu-latest
+  jobs:
+  - job: lint
+    displayName: lint checks
+    steps:
+    - checkout: self
+    - script: pip install pre-commit==3.8.0
+    - bash: chmod +x scripts/lint
+    - bash: ./scripts/lint
+  - job: SastBandit
+    displayName: Static application security testing with Bandit
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.10'
+    - script: |
+        python -m pip install bandit
+      name: install_bandit
+      displayName: 'Install bandit'
+    # bandit -lll means only flag HIGH severity issues
+    - script: |
+        python -m bandit -r ./src -lll
+      displayName: 'Bandit scan'
+      condition: succeeded() 
+  - job: SastMdso
+    displayName: Static application security testing with Terrascan and Trivy
+    steps:
+    - task: MicrosoftSecurityDevOps@1
+      displayName: 'Microsoft Security DevOps'
+      inputs:
+        tools: 'terrascan, trivy'
+        break: true # this build step if any high severity level results are found.
+        publish: true # will publish the output SARIF results file to the chosen pipeline artifact
+
+- stage: BuildPushDockerImage
+  dependsOn: CI
+  pool:
+    vmImage: ubuntu-latest
+  jobs:
+  - job: BuildPushDockerImage
+    displayName: build and push Faiss Docker image 
+    steps:
+    - checkout: self
+    - task: Docker@2
+      displayName: Build docker image
+      inputs:
+        command: build
+        containerRegistry: $(serviceConnectionName)
+        repository: $(container_repository)
+        dockerfile: ./Dockerfile.faiss
+        buildContext: $(Build.SourcesDirectory)
+        tags: $(tag)
+        arguments: '--build-arg ENVIRONMENT=$(environment)'
+
+
+    - task: Docker@2
+      displayName: Push docker image
+      inputs:
+        command: push
+        containerRegistry: $(serviceConnectionName)
+        repository: $(container_repository)
+        dockerfile: ./Dockerfile.faiss
+        buildContext: $(Build.SourcesDirectory)
+        tags: $(tag)
+

@@ -1,0 +1,20 @@
+FROM python:3.10-slim
+
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends dialog \
+    && apt install pandoc -y \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG ENVIRONMENT="dev"
+ENV ENVIRONMENT=${ENVIRONMENT}
+
+WORKDIR /app
+COPY requirements-reporting.txt requirements.txt 
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+RUN pip3 install -e .
+
+CMD ["python", "src/scheduled_runs/process_chats.py"]

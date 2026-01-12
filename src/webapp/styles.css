@@ -1,0 +1,36 @@
+/* Side bar background color */
+[data-testid="stSidebarContent"] {
+    background-color: #FFD8BD;
+}
+
+/* Make specific info/feedback boxes text white */
+.st-emotion-cache-1jtzid1, /* feedback message */
+.st-emotion-cache-11njf6r p /* info box paragraph */ {
+    color: #00315A !important;
+}
+
+/* Exclusion: feedback message in .st-emotion-cache-3tgn89 should be black */
+.st-emotion-cache-3tgn89 .st-emotion-cache-1jtzid1 {
+    color: black !important;
+}
+
+/* titel van tabbladen */
+a[data-testid="stSidebarNavLink"] span {
+    color: #00315A !important;
+}
+
+/* Vergroot logo linksboven */
+[alt=Logo] {
+    width: 100%; 
+    height: auto;
+  }
+
+/* Make selectbox widget label text white */
+[data-testid="stWidgetLabel"] {
+    color: #00315A !important;
+}
+
+/* Hide fullscreen button above images */
+.st-emotion-cache-1iuhdj4.et0utro0 {
+    visibility: hidden;
+}

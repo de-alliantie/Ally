@@ -1,0 +1,44 @@
+[server]
+enableStaticServing = true
+
+[theme]
+
+# The preset Streamlit theme that your custom theme inherits from.
+# One of "light" or "dark".
+base = "light"
+
+# Primary accent color for interactive elements.
+primaryColor = "#0062FF"
+
+# Background color for the main content area.
+backgroundColor = "#FFFFFF"
+
+# Color used for almost all text.
+textColor = "#00315A"
+
+# Font family for all text in the app, except code blocks. One of "sans serif",
+# "serif", or "monospace", (or, in this case a custom one).
+font = "gt-eesti"
+
+# Load the font files here. "app" is the parent folder of the main streamlit .py file. 
+[[theme.fontFaces]]
+family = "gt-eesti"
+url = "app/static/GT-Eesti-Display-Light-2.ttf"
+weight = 400
+
+[[theme.fontFaces]]
+family = "gt-eesti"
+url = "app/static/GT-Eesti-Display-Bold-2.ttf"
+weight = 700
+
+[[theme.fontFaces]]
+family = "gt-eesti"
+url = "app/static/GT-Eesti-Display-Medium-2.ttf"
+weight = 500
+
+
+[ui]
+hideTopBar = true
+
+[client]
+toolbarMode = "minimal"  # Options: "developer", "viewer", "minimal", "auto"
