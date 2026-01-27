@@ -101,3 +101,6 @@ data/*
 
 # FAISS vectorstores
 src/data/faiss
+
+# Certificates
+*.pem

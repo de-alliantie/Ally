@@ -6,3 +6,5 @@ office365-rest-python-client==2.5.7
 pymsteams==0.2.2
 pydantic==2.6.4
 pypandoc==1.13
+httpx==0.28.1
+msal==1.34.0

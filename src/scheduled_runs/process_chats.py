@@ -9,10 +9,9 @@ from typing import List, Optional
 import pypandoc
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import ContainerClient
-from office365.runtime.auth.client_credential import ClientCredential
-from office365.sharepoint.client_context import ClientContext
 from pydantic import BaseModel
 from pymsteams import TeamsWebhookException, connectorcard
+from sharepoint_utility import SharePointUtility
 
 from scheduled_runs.runlogging import logger
 
@@ -194,49 +193,6 @@ class ProcessChats:
         pypandoc.convert_file(self.filepath_md_file, "docx", outputfile=self.filepath_docx_file)
 
 
-class UploadFilesSharePoint:
-    """Facilitate the connection to a SharePoint site and the upload of documents for reporting purposes."""
-
-    def __init__(self, environment: str = "dev"):
-        """Initialize UploadFilesSharePoint with environment."""
-        self.prefix_relative_url = "/sites/DCC-python"
-        self.sharepoint_url = f"{SHAREPOINT_URL}{self.prefix_relative_url}"
-        self.folder_name = self.prefix_relative_url + "/Data Science OPS/Klantenservice-Ally"
-        if environment != "prd":
-            self.folder_name += "/Test"
-
-        logger.debug(f"Trying to connect to {self.sharepoint_url}")
-        client_credentials = ClientCredential(
-            os.environ["SHAREPOINT_CLIENT_ID"], os.environ["SHAREPOINT_CLIENT_SECRET"]
-        )
-        self.ctx = ClientContext(self.sharepoint_url).with_credentials(client_credentials)
-        try:
-            web = self.ctx.web
-            self.ctx.load(web)
-            self.ctx.execute_query()
-            logger.debug(f"Connected to {self.ctx.base_url}")
-        except Exception as e:
-            logger.error(f"Could not connect to {self.ctx.base_url}")
-            logger.error(repr(e))
-
-    def upload_document(self, filepath_local: str, sharepoint_subfolder: str):
-        """Upload file to sharepoint.
-
-        Notes:
-        - sharepoint_folder is name of folder within 'Documenten'; if None, the file is uploaded to the 'Documenten'
-          library (root) and if not existing, it is created
-        - if file already exists, it will be overwritten
-        """
-        if len(sharepoint_subfolder) > 0:
-            subfolder_name = self.folder_name + f"/{sharepoint_subfolder}"
-        self.ctx.web.ensure_folder_path(subfolder_name).execute_query()
-        folder = self.ctx.web.get_folder_by_server_relative_url(subfolder_name)
-        with open(filepath_local, "rb") as f:
-            file = folder.files.upload(f).execute_query()
-        logger.debug(f"File has been uploaded into: {file.serverRelativeUrl}")
-        return f"{SHAREPOINT_URL}{file.serverRelativeUrl}?web=1"
-
-
 class MessageDTO(BaseModel):
     """Data transfer object for messages."""
 
@@ -320,8 +276,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if os.environ["ENVIRONMENT"] == "prd":
+        sharepoint_folder_path = "Klantenservice-Ally/Gesprekken"
 
         mention_users_str = os.environ["KLANTENSERVICE_CHAT_REPORTING_MENTION_USERS"]
+        teams_webhook = os.environ["TEAMS_WEBHOOK_DCC_KLANTENSERVICE_ALLY"]
 
         if "," in mention_users_str:
 
@@ -329,22 +287,43 @@ if __name__ == "__main__":
 
             mention_users = [{"name": email.split("@")[0], "email": email} for email in mention_users_list]
     else:
+        sharepoint_folder_path = "Klantenservice-Ally/Test/Gesprekken"
+        teams_webhook = os.environ["TEAMS_WEBHOOK_DATASCIENCE_ALGEMEEN"]
         mention_users = None
-    credential = DefaultAzureCredential()
 
-    # # Process chats
+    # Process chats
+    credential = DefaultAzureCredential()
     logger.info("Start processing chats")
     process_chats = ProcessChats(credential, args.date_to_process, os.environ["ENVIRONMENT"])
     info = process_chats.main()
 
     # Write to Sharepoint
     logger.info("Start writing to Sharepoint")
-    spc = UploadFilesSharePoint(environment=os.environ["ENVIRONMENT"])
-    url_conversations = spc.upload_document(
-        filepath_local=process_chats.filepath_docx_file, sharepoint_subfolder="Gesprekken"
+
+    sp = SharePointUtility()
+    sp.connect(
+        sitename="DCC-python",
+        sharepoint_url=os.environ["SHAREPOINT_URL"],
+        tenant_id=os.environ["TENANT_ID"],
+        client_id=os.environ["SPO_APPONLY_CERT_DCC_PYTHON_CLIENT_ID"],
+        private_key=os.environ["SPO_APPONLY_CERT_DCC_PYTHON_PRIVATE_KEY"],
+        private_key_thumbprint=os.environ["SPO_APPONLY_CERT_DCC_PYTHON_PRIVATE_KEY_THUMBPRINT"],
     )
 
-    # # Communicate to Teams
+    DATA_SCIENCE_OPS_DRIVE_ID = sp.get_drive_id_by_name(name="Data Science OPS")
+
+    if DATA_SCIENCE_OPS_DRIVE_ID is not None:
+
+        # Upload a file
+        response = sp.upload_file(
+            drive_id=DATA_SCIENCE_OPS_DRIVE_ID,
+            folder_path=sharepoint_folder_path,
+            local_file_path=process_chats.filepath_docx_file,
+        )
+
+        url_conversations = response.get("webUrl")
+
+    # Communicate to Teams
     logger.info("Start writing to Teams")
 
     message = MessageDTO(
@@ -354,5 +333,5 @@ if __name__ == "__main__":
         link_title="Bekijk de gestelde vragen en de antwoorden die ik heb gegeven",
         link_url=url_conversations,
     )
-    messenger = TeamsMessenger(webhook_url=os.environ["TEAMS_WEBHOOK"], messageDTO=message)
+    messenger = TeamsMessenger(webhook_url=teams_webhook, messageDTO=message)
     messenger.send_message()
